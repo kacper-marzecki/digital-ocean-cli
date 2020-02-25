@@ -57,11 +57,20 @@ fn delete_droplet(configuration: &Configuration, mut arguments: std::str::SplitW
     }
 }
 
+fn create_droplet(configuration: &Configuration) -> Result<(), AppError>{
+    let droplet_config = DropletConfiguration {
+        
+    }
+    get_input("");
+    Ok(())
+}
+
 fn show_help() -> Result<(), AppError>{
     println!("Possible commands: 
         list -> lists currently running droplets  
         help -> shows this help text
         delete XXX -> deletes droplet with name == XXX 
+        create  -> enters new droplet creation 'wizard'
         ");
     Ok(())
 }
@@ -72,6 +81,7 @@ fn match_command(command: String, configuration: &Configuration ) -> Result<(), 
         Some("list") => show_droplets(&configuration),   
         Some("help") => show_help(),
         Some("delete") => delete_droplet(&configuration, tokens),
+        Some("create") => create_droplet(&configuration),
         _ => Err(AppError::CommandError("invalid command".to_string()))
     };
     if let Err(err) = result {
@@ -85,15 +95,18 @@ fn match_command(command: String, configuration: &Configuration ) -> Result<(), 
     Ok(())
  }
 
-fn get_input() -> Result<String, AppError> {
-    use_input(|line| Ok(line))
+fn get_input(prompt: &str) -> Result<String, AppError> {
+    use_input(Some(prompt), |line| Ok(line))
 }
 
-fn use_input<F, R>(mut f: F) -> Result<R, AppError> 
+fn use_input<F, R>(prompt: Option<&str>, mut f: F) -> Result<R, AppError> 
     where 
         F: FnMut(String) -> Result<R, AppError>
         {
         let mut rl = Editor::<()>::new();
+        if let Some(text){
+            println!(text)
+        }
         let readline = rl.readline(">> ");
         match readline {
             Ok(line) => {
@@ -127,6 +140,6 @@ fn main() {
 
     show_help();
     loop {
-        use_input(|line|  match_command(line, &configuration));
+        use_input(None, |line|  match_command(line, &configuration));
     }
 }

@@ -18,3 +18,9 @@ pub struct Configuration {
     #[envconfig(from = "FRONTEND_ORIGIN")]
     pub frontend_url: Option<String>,
 }
+
+#[allow(dead_code)]
+#[derive(Debug, Clone)]
+pub struct DropletConfiguration {
+    pub 
+}
