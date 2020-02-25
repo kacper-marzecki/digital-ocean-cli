@@ -3,6 +3,7 @@ use reqwest::{Error as ReqError};
 
 pub enum AppError {
     CommandError(String),
+    LogicError(String),
     NetworkingError(String)
 }
 

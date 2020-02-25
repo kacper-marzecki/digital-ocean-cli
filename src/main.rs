@@ -7,7 +7,7 @@ extern crate serde_derive;
 mod config;
 mod api;
 mod error;
-
+mod util;
 extern crate rustyline;
 
 use rustyline::error::ReadlineError;
@@ -33,24 +33,52 @@ fn show_droplets(configuration: &Configuration) -> Result<(), AppError> {
     Ok(())
 }
 
+fn find_droplet_id_by_name(droplets: Droplets, name: &str) -> Option<u32> {
+    droplets.droplets.into_iter().find_map(|droplet|{ 
+        if droplet.name == name {
+            Some(droplet.id)
+        }  else {
+            Option::None
+        }})
+}
+
+fn delete_droplet(configuration: &Configuration, mut arguments: std::str::SplitWhitespace) -> Result<(), AppError> {
+    let droplet_name = if let Some(name) = arguments.next() {
+        Ok(name)
+    } else {
+        Err(AppError::CommandError("Please provide droplet name to delete".to_string()))
+    }?;
+    let droplets = list_droplets(&configuration)?;
+    if let Some(droplet_id) = find_droplet_id_by_name(droplets, &droplet_name)  {
+        api::call_do(&configuration, format!("droplet/{}", droplet_id), Method::DELETE)?;
+        Ok(())
+    } else {
+        Err(AppError::LogicError(format!("droplet {} doesnt currently exist", droplet_name)))
+    }
+}
+
 fn show_help() -> Result<(), AppError>{
     println!("Possible commands: 
         list -> lists currently running droplets  
         help -> shows this help text
+        delete XXX -> deletes droplet with name == XXX  
         ");
     Ok(())
 }
 
 fn match_command(command: String, configuration: &Configuration ){
-    let result = match command.as_str() {
-        "list" => show_droplets(&configuration),   
-        "help" => show_help(),
+    let mut tokens = command.as_str().split_whitespace();
+    let result = match &tokens.next() {
+        Some("list") => show_droplets(&configuration),   
+        Some("help") => show_help(),
+        Some("delete") => delete_droplet(&configuration, tokens),
         _ => Err(AppError::CommandError("invalid command".to_string()))
     };
     if let Err(err) = result {
         match err {
             AppError::CommandError(reason) => eprint!("Command error: {:?}", reason),
             AppError::NetworkingError(reason) => eprint!("Networking error: {:?}", reason),
+            AppError::LogicError(reason) => eprint!("Logic error: {:?}", reason),
         }
     };
  }
