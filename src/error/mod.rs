@@ -4,7 +4,8 @@ use reqwest::{Error as ReqError};
 pub enum AppError {
     CommandError(String),
     LogicError(String),
-    NetworkingError(String)
+    NetworkingError(String),
+    InteruptionError
 }
 
 impl std::convert::From<ReqError> for AppError {

@@ -61,12 +61,12 @@ fn show_help() -> Result<(), AppError>{
     println!("Possible commands: 
         list -> lists currently running droplets  
         help -> shows this help text
-        delete XXX -> deletes droplet with name == XXX  
+        delete XXX -> deletes droplet with name == XXX 
         ");
     Ok(())
 }
 
-fn match_command(command: String, configuration: &Configuration ){
+fn match_command(command: String, configuration: &Configuration ) -> Result<(), AppError>{
     let mut tokens = command.as_str().split_whitespace();
     let result = match &tokens.next() {
         Some("list") => show_droplets(&configuration),   
@@ -79,9 +79,40 @@ fn match_command(command: String, configuration: &Configuration ){
             AppError::CommandError(reason) => eprint!("Command error: {:?}", reason),
             AppError::NetworkingError(reason) => eprint!("Networking error: {:?}", reason),
             AppError::LogicError(reason) => eprint!("Logic error: {:?}", reason),
+            AppError::InteruptionError => eprint!("Interrupted"),
         }
     };
+    Ok(())
  }
+
+fn get_input() -> Result<String, AppError> {
+    use_input(|line| Ok(line))
+}
+
+fn use_input<F, R>(mut f: F) -> Result<R, AppError> 
+    where 
+        F: FnMut(String) -> Result<R, AppError>
+        {
+        let mut rl = Editor::<()>::new();
+        let readline = rl.readline(">> ");
+        match readline {
+            Ok(line) => {
+               f(line)
+            },
+            Err(ReadlineError::Interrupted) => {
+                println!("CTRL-C");
+                Err(AppError::InteruptionError)
+            },
+            Err(ReadlineError::Eof) => {
+                println!("CTRL-D");
+                Err(AppError::InteruptionError)
+            },
+            Err(err) => {
+                println!("Error: {:?}", err);
+                Err(AppError::InteruptionError)
+            }
+        }
+}
 
 fn main() {
 
@@ -95,26 +126,7 @@ fn main() {
     println!("MIESZKANIA DEPLOYMENT TOOL INITIALIZING!");
 
     show_help();
-    let mut rl = Editor::<()>::new();
     loop {
-        let readline = rl.readline(">> ");
-        match readline {
-            Ok(line) => {
-                rl.add_history_entry(line.as_str());
-                match_command(line, &configuration);
-            },
-            Err(ReadlineError::Interrupted) => {
-                println!("CTRL-C");
-                break
-            },
-            Err(ReadlineError::Eof) => {
-                println!("CTRL-D");
-                break
-            },
-            Err(err) => {
-                println!("Error: {:?}", err);
-                break
-            }
-        }
+        use_input(|line|  match_command(line, &configuration));
     }
 }
