@@ -6,6 +6,7 @@ extern crate serde_json;
 extern crate serde_derive;
 mod config;
 mod api;
+mod error;
 
 extern crate rustyline;
 
@@ -15,42 +16,35 @@ use std::string::String;
 use envconfig::Envconfig;
 use config::Configuration;
 use reqwest::blocking::Response;
-// use reqwest::Response;
-use reqwest::{Error as ReqError};
+use reqwest::{Error as ReqError, Method};
 use api::{Droplets, Droplet};
+use error::AppError;
 
-enum AppError {
-    CommandError(String),
-    NetworkingError(String)
-}
-
-impl std::convert::From<ReqError> for AppError {
-    fn from(err: ReqError)-> Self {
-        AppError::NetworkingError(format!("{}", err))
-    }
-}
-
-
-fn make_api_call(configuration: &Configuration, api_path: String) -> Result<Response, ReqError> {
-    let url = format!("https://api.digitalocean.com/v2/{}", api_path);
-    let client = reqwest::blocking::Client::new();
-    let response = client.get(&url)
-    .bearer_auth(configuration.do_token.as_str())
-    .header("Content-Type", "application/json")
-    .send();
-    response
-}
 
 fn list_droplets(configuration: &Configuration)-> Result<Droplets, AppError>  {
-    let droplets = make_api_call(&configuration, "droplets".to_string())?    
+    let droplets = api::call_do(&configuration, "droplets".to_string(), Method::GET )?    
     .json::<Droplets>()?;
-    println!("{:#?}", droplets.droplets);
     Ok(droplets)
+}
+
+fn show_droplets(configuration: &Configuration) -> Result<(), AppError> {
+    let droplets = list_droplets(&configuration)?;
+    println!("{:#?}", droplets.droplets);
+    Ok(())
+}
+
+fn show_help() -> Result<(), AppError>{
+    println!("Possible commands: 
+        list -> lists currently running droplets  
+        help -> shows this help text
+        ");
+    Ok(())
 }
 
 fn match_command(command: String, configuration: &Configuration ){
     let result = match command.as_str() {
-        "list" => list_droplets(&configuration),    
+        "list" => show_droplets(&configuration),   
+        "help" => show_help(),
         _ => Err(AppError::CommandError("invalid command".to_string()))
     };
     if let Err(err) = result {
@@ -72,9 +66,7 @@ fn main() {
     };
     println!("MIESZKANIA DEPLOYMENT TOOL INITIALIZING!");
 
-    println!("Possible commands: 
-        list -> lists currently running droplets  
-        ");
+    show_help();
     let mut rl = Editor::<()>::new();
     loop {
         let readline = rl.readline(">> ");
