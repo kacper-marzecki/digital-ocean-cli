@@ -10,6 +10,20 @@ pub struct Droplet {
     pub size_slug: String,
     pub disk: u8,
     pub status: String,
+    pub networks: DropletNetworks,
+}
+
+#[derive(Deserialize, Debug)]
+pub struct DropletNetwork {
+    pub ip_address: String,
+    pub netmask: String,
+    pub gateway: String,
+    pub r#type: String
+}
+
+#[derive(Deserialize, Debug)]
+pub struct DropletNetworks {
+    pub v4: Vec<DropletNetwork>
 }
 
 #[derive(Deserialize, Debug)]

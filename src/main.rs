@@ -10,7 +10,7 @@ mod error;
 mod util;
 extern crate rustyline;
 
-use api::{Droplet, Droplets};
+use api::{Droplet, DropletNetwork, DropletNetworks, Droplets};
 use config::{Configuration, DropletConfiguration};
 use envconfig::Envconfig;
 use error::AppError;
@@ -32,10 +32,10 @@ fn show_droplets(configuration: &Configuration) -> Result<(), AppError> {
     Ok(())
 }
 
-fn find_droplet_id_by_name(droplets: Droplets, name: &str) -> Option<u32> {
+fn find_droplet_id_by_name(droplets: Droplets, name: &str) -> Option<Droplet> {
     droplets.droplets.into_iter().find_map(|droplet| {
         if droplet.name == name {
-            Some(droplet.id)
+            Some(droplet)
         } else {
             Option::None
         }
@@ -54,10 +54,10 @@ fn delete_droplet(
         ))
     }?;
     let droplets = list_droplets(&configuration)?;
-    if let Some(droplet_id) = find_droplet_id_by_name(droplets, &droplet_name) {
+    if let Some(droplet) = find_droplet_id_by_name(droplets, &droplet_name) {
         let response = api::call_do(
             &configuration,
-            format!("droplets/{}", droplet_id),
+            format!("droplets/{}", droplet.id),
             Method::DELETE,
             None,
         )?;
@@ -92,6 +92,45 @@ fn create_preset_droplet(configuration: &Configuration) -> Result<(), AppError> 
         Some(serialised),
     )?;
     Ok(())
+}
+
+fn ssh_authenticate(
+    configuration: &Configuration,
+    mut arguments: std::str::SplitWhitespace,
+) -> Result<(), AppError> {
+    use ssh2::Session;
+    use std::net::TcpStream;
+    let droplet_name = if let Some(name) = arguments.next() {
+        Ok(name)
+    } else {
+        Err(AppError::CommandError(
+            "Please provide droplet name to connect to".to_string(),
+        ))
+    }?;
+    let droplets = list_droplets(&configuration)?;
+    if let Some(droplet) = find_droplet_id_by_name(droplets, droplet_name) {
+        if let Some(network) = droplet.networks.v4.get(0) {
+            let tcp = TcpStream::connect(format!("{}:22", network.ip_address)).unwrap();
+            let mut sess = Session::new().unwrap();
+            sess.set_tcp_stream(tcp);
+            sess.handshake().unwrap();
+            sess.userauth_agent("root").unwrap();
+            assert!(sess.authenticated());
+            Ok(())
+        } else {
+            Err(AppError::LogicError(format!(
+                "droplet {} doesnt have a network",
+                droplet_name
+            )))
+        }
+    } else {
+        Err(AppError::LogicError(format!(
+            "droplet {} doesnt currently exist",
+            droplet_name
+        )))
+    }
+
+    // Connect to the local SSH server
 }
 
 fn create_custom_droplet(configuration: &Configuration) -> Result<(), AppError> {
@@ -147,6 +186,7 @@ fn match_command(command: String, configuration: &Configuration) -> Result<(), A
         Some("help") => show_help(),
         Some("delete") => delete_droplet(&configuration, tokens),
         Some("create") => create_droplet(&configuration),
+        Some("ssh") => ssh_authenticate(&configuration, tokens),
         _ => Err(AppError::CommandError("invalid command".to_string())),
     };
     if let Err(err) = result {
