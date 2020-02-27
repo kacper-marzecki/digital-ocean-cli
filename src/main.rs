@@ -91,36 +91,36 @@ fn create_preset_droplet(configuration: &Configuration) -> Result<(), AppError> 
         Method::POST,
         Some(serialised),
     )?;
-    println!("{:?}", response);
-
     Ok(())
 }
 
 fn create_custom_droplet(configuration: &Configuration) -> Result<(), AppError> {
     let droplet_config = DropletConfiguration {
         name: get_input("Enter droplet name")?,
-        region: get_input("Enter droplet name")?,
-        size: get_input("Enter droplet name")?,
-        image: get_input("Enter droplet name")?,
+        region: get_input("Enter droplet region")?,
+        size: get_input("Enter droplet size")?,
+        image: get_input("Enter droplet image")?,
         backups: false,
         ipv6: false,
-        private_networking: false,
-        tags: vec![get_input("Enter droplet name")?],
+        private_networking: true,
+        tags: get_input("Enter tags")?
+            .split_whitespace()
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>(),
     };
     let serialised = serde_json::to_string(&droplet_config)?;
-    let response = api::call_do(
+    println!("Creating droplet: {:#?}", droplet_config);
+    api::call_do(
         &configuration,
         "droplets".to_string(),
         Method::POST,
         Some(serialised),
     )?;
-    println!("{:?}", response);
     Ok(())
 }
 
 fn create_droplet(configuration: &Configuration) -> Result<(), AppError> {
-    // get if from preset or custom
-    let is_custom = get_bool_input("Custom Droplet ? N/y")?;
+    let is_custom = get_bool_input("Custom Droplet ?")?;
     if is_custom {
         create_custom_droplet(&configuration)
     } else {
