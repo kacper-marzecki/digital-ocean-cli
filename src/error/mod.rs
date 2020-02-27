@@ -1,15 +1,21 @@
-
-use reqwest::{Error as ReqError};
+use reqwest::Error as ReqError;
 
 pub enum AppError {
     CommandError(String),
     LogicError(String),
     NetworkingError(String),
-    InteruptionError
+    InteruptionError,
+    InputError
 }
 
 impl std::convert::From<ReqError> for AppError {
-    fn from(err: ReqError)-> Self {
+    fn from(err: ReqError) -> Self {
         AppError::NetworkingError(format!("{}", err))
+    }
+}
+
+impl std::convert::From<serde_json::Error> for AppError {
+    fn from(err: serde_json::Error) -> Self {
+        AppError::InputError
     }
 }
