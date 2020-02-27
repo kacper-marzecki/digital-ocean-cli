@@ -21,8 +21,8 @@ use rustyline::Editor;
 use std::string::String;
 
 fn list_droplets(configuration: &Configuration) -> Result<Droplets, AppError> {
-    let droplets =
-        api::call_do(&configuration, "droplets".to_string(), Method::GET)?.json::<Droplets>()?;
+    let droplets = api::call_do(&configuration, "droplets".to_string(), Method::GET, None)?
+        .json::<Droplets>()?;
     Ok(droplets)
 }
 
@@ -59,8 +59,8 @@ fn delete_droplet(
             &configuration,
             format!("droplets/{}", droplet_id),
             Method::DELETE,
+            None,
         )?;
-        println!("{:?}", response);
         Ok(())
     } else {
         Err(AppError::LogicError(format!(
@@ -71,6 +71,28 @@ fn delete_droplet(
 }
 
 fn create_preset_droplet(configuration: &Configuration) -> Result<(), AppError> {
+    let droplet_config = DropletConfiguration {
+        name: get_input("Enter droplet name")?,
+        region: "lon1".to_string(),
+        size: "s-1vcpu-1gb".to_string(),
+        image: "ubuntu-16-04-x64".to_string(),
+        backups: false,
+        ipv6: false,
+        private_networking: false,
+        tags: get_input("Enter tags")?
+            .split_whitespace()
+            .map(|x| x.to_string())
+            .collect::<Vec<String>>(),
+    };
+    let serialised = serde_json::to_string(&droplet_config)?;
+    let response = api::call_do(
+        &configuration,
+        "droplets".to_string(),
+        Method::POST,
+        Some(serialised),
+    )?;
+    println!("{:?}", response);
+
     Ok(())
 }
 
@@ -85,7 +107,14 @@ fn create_custom_droplet(configuration: &Configuration) -> Result<(), AppError> 
         private_networking: false,
         tags: vec![get_input("Enter droplet name")?],
     };
-
+    let serialised = serde_json::to_string(&droplet_config)?;
+    let response = api::call_do(
+        &configuration,
+        "droplets".to_string(),
+        Method::POST,
+        Some(serialised),
+    )?;
+    println!("{:?}", response);
     Ok(())
 }
 
@@ -134,13 +163,14 @@ fn match_command(command: String, configuration: &Configuration) -> Result<(), A
 }
 
 fn get_bool_input(prompt: &str) -> Result<bool, AppError> {
-    use_input(Some(format!("{} y/n", prompt).as_str()), |line| {
-        match line.as_str() {
+    use_input(
+        Some(format!("{} y/n", prompt).as_str()),
+        |line| match line.as_str() {
             "y" => Ok(true),
             "n" => Ok(false),
             _ => Err(AppError::InputError),
-        }
-    })
+        },
+    )
 }
 
 fn get_input(prompt: &str) -> Result<String, AppError> {

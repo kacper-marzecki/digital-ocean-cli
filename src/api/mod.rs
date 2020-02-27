@@ -21,13 +21,23 @@ pub fn call_do(
     configuration: &Configuration,
     api_path: String,
     method: Method,
+    body: Option<String>,
 ) -> Result<Response, ReqError> {
     let url = format!("https://api.digitalocean.com/v2/{}", api_path);
     let client = reqwest::blocking::Client::new();
-    let response = client
-        .request(method, &url)
-        .bearer_auth(configuration.do_token.as_str())
-        .header("Content-Type", "application/json")
-        .send();
-    response
+    if let Some(b) = body {
+        println! {"{}", b};
+        client
+            .request(method, &url)
+            .bearer_auth(configuration.do_token.as_str())
+            .header("Content-Type", "application/json")
+            .body(b)
+            .send()
+    } else {
+        client
+            .request(method, &url)
+            .bearer_auth(configuration.do_token.as_str())
+            .header("Content-Type", "application/json")
+            .send()
+    }
 }

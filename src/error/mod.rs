@@ -13,3 +13,9 @@ impl std::convert::From<ReqError> for AppError {
         AppError::NetworkingError(format!("{}", err))
     }
 }
+
+impl std::convert::From<serde_json::Error> for AppError {
+    fn from(err: serde_json::Error) -> Self {
+        AppError::InputError
+    }
+}
