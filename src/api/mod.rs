@@ -18,12 +18,12 @@ pub struct DropletNetwork {
     pub ip_address: String,
     pub netmask: String,
     pub gateway: String,
-    pub r#type: String
+    pub r#type: String,
 }
 
 #[derive(Deserialize, Debug)]
 pub struct DropletNetworks {
-    pub v4: Vec<DropletNetwork>
+    pub v4: Vec<DropletNetwork>,
 }
 
 #[derive(Deserialize, Debug)]

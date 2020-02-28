@@ -6,166 +6,15 @@ extern crate serde_json;
 extern crate serde_derive;
 mod api;
 mod config;
+mod core;
 mod error;
 mod util;
 extern crate rustyline;
 
-use api::{Droplet, DropletNetwork, DropletNetworks, Droplets};
-use config::{Configuration, DropletConfiguration};
+use config::Configuration;
 use envconfig::Envconfig;
 use error::AppError;
-use reqwest::blocking::Response;
-use reqwest::{Error as ReqError, Method};
-use rustyline::error::ReadlineError;
-use rustyline::Editor;
 use std::string::String;
-
-fn list_droplets(configuration: &Configuration) -> Result<Droplets, AppError> {
-    let droplets = api::call_do(&configuration, "droplets".to_string(), Method::GET, None)?
-        .json::<Droplets>()?;
-    Ok(droplets)
-}
-
-fn show_droplets(configuration: &Configuration) -> Result<(), AppError> {
-    let droplets = list_droplets(&configuration)?;
-    println!("{:#?}", droplets.droplets);
-    Ok(())
-}
-
-fn find_droplet_id_by_name(droplets: Droplets, name: &str) -> Option<Droplet> {
-    droplets.droplets.into_iter().find_map(|droplet| {
-        if droplet.name == name {
-            Some(droplet)
-        } else {
-            Option::None
-        }
-    })
-}
-
-fn delete_droplet(
-    configuration: &Configuration,
-    mut arguments: std::str::SplitWhitespace,
-) -> Result<(), AppError> {
-    let droplet_name = if let Some(name) = arguments.next() {
-        Ok(name)
-    } else {
-        Err(AppError::CommandError(
-            "Please provide droplet name to delete".to_string(),
-        ))
-    }?;
-    let droplets = list_droplets(&configuration)?;
-    if let Some(droplet) = find_droplet_id_by_name(droplets, &droplet_name) {
-        let response = api::call_do(
-            &configuration,
-            format!("droplets/{}", droplet.id),
-            Method::DELETE,
-            None,
-        )?;
-        Ok(())
-    } else {
-        Err(AppError::LogicError(format!(
-            "droplet {} doesnt currently exist",
-            droplet_name
-        )))
-    }
-}
-
-fn create_preset_droplet(configuration: &Configuration) -> Result<(), AppError> {
-    let droplet_config = DropletConfiguration {
-        name: get_input("Enter droplet name")?,
-        region: "lon1".to_string(),
-        size: "s-1vcpu-1gb".to_string(),
-        image: "ubuntu-16-04-x64".to_string(),
-        backups: false,
-        ipv6: false,
-        private_networking: false,
-        tags: get_input("Enter tags")?
-            .split_whitespace()
-            .map(|x| x.to_string())
-            .collect::<Vec<String>>(),
-    };
-    let serialised = serde_json::to_string(&droplet_config)?;
-    let response = api::call_do(
-        &configuration,
-        "droplets".to_string(),
-        Method::POST,
-        Some(serialised),
-    )?;
-    Ok(())
-}
-
-fn ssh_authenticate(
-    configuration: &Configuration,
-    mut arguments: std::str::SplitWhitespace,
-) -> Result<(), AppError> {
-    use ssh2::Session;
-    use std::net::TcpStream;
-    let droplet_name = if let Some(name) = arguments.next() {
-        Ok(name)
-    } else {
-        Err(AppError::CommandError(
-            "Please provide droplet name to connect to".to_string(),
-        ))
-    }?;
-    let droplets = list_droplets(&configuration)?;
-    if let Some(droplet) = find_droplet_id_by_name(droplets, droplet_name) {
-        if let Some(network) = droplet.networks.v4.get(0) {
-            let tcp = TcpStream::connect(format!("{}:22", network.ip_address)).unwrap();
-            let mut sess = Session::new().unwrap();
-            sess.set_tcp_stream(tcp);
-            sess.handshake().unwrap();
-            sess.userauth_agent("root").unwrap();
-            assert!(sess.authenticated());
-            Ok(())
-        } else {
-            Err(AppError::LogicError(format!(
-                "droplet {} doesnt have a network",
-                droplet_name
-            )))
-        }
-    } else {
-        Err(AppError::LogicError(format!(
-            "droplet {} doesnt currently exist",
-            droplet_name
-        )))
-    }
-
-    // Connect to the local SSH server
-}
-
-fn create_custom_droplet(configuration: &Configuration) -> Result<(), AppError> {
-    let droplet_config = DropletConfiguration {
-        name: get_input("Enter droplet name")?,
-        region: get_input("Enter droplet region")?,
-        size: get_input("Enter droplet size")?,
-        image: get_input("Enter droplet image")?,
-        backups: false,
-        ipv6: false,
-        private_networking: true,
-        tags: get_input("Enter tags")?
-            .split_whitespace()
-            .map(|x| x.to_string())
-            .collect::<Vec<String>>(),
-    };
-    let serialised = serde_json::to_string(&droplet_config)?;
-    println!("Creating droplet: {:#?}", droplet_config);
-    api::call_do(
-        &configuration,
-        "droplets".to_string(),
-        Method::POST,
-        Some(serialised),
-    )?;
-    Ok(())
-}
-
-fn create_droplet(configuration: &Configuration) -> Result<(), AppError> {
-    let is_custom = get_bool_input("Custom Droplet ?")?;
-    if is_custom {
-        create_custom_droplet(&configuration)
-    } else {
-        create_preset_droplet(&configuration)
-    }
-}
 
 fn show_help() -> Result<(), AppError> {
     println!(
@@ -182,11 +31,10 @@ fn show_help() -> Result<(), AppError> {
 fn match_command(command: String, configuration: &Configuration) -> Result<(), AppError> {
     let mut tokens = command.as_str().split_whitespace();
     let result = match &tokens.next() {
-        Some("list") => show_droplets(&configuration),
+        Some("list") => core::show_droplets(&configuration),
         Some("help") => show_help(),
-        Some("delete") => delete_droplet(&configuration, tokens),
-        Some("create") => create_droplet(&configuration),
-        Some("ssh") => ssh_authenticate(&configuration, tokens),
+        Some("delete") => core::delete_droplet(&configuration, tokens),
+        Some("create") => core::create_droplet(&configuration),
         _ => Err(AppError::CommandError("invalid command".to_string())),
     };
     if let Err(err) = result {
@@ -202,47 +50,6 @@ fn match_command(command: String, configuration: &Configuration) -> Result<(), A
     }
 }
 
-fn get_bool_input(prompt: &str) -> Result<bool, AppError> {
-    use_input(
-        Some(format!("{} y/n", prompt).as_str()),
-        |line| match line.as_str() {
-            "y" => Ok(true),
-            "n" => Ok(false),
-            _ => Err(AppError::InputError),
-        },
-    )
-}
-
-fn get_input(prompt: &str) -> Result<String, AppError> {
-    use_input(Some(prompt), |line| Ok(line))
-}
-
-fn use_input<F, R>(prompt: Option<&str>, mut f: F) -> Result<R, AppError>
-where
-    F: FnMut(String) -> Result<R, AppError>,
-{
-    let mut rl = Editor::<()>::new();
-    if let Some(text) = prompt {
-        println!("{}", text);
-    }
-    let readline = rl.readline(">> ");
-    match readline {
-        Ok(line) => f(line),
-        Err(ReadlineError::Interrupted) => {
-            println!("CTRL-C");
-            Err(AppError::InteruptionError)
-        }
-        Err(ReadlineError::Eof) => {
-            println!("CTRL-D");
-            Err(AppError::InteruptionError)
-        }
-        Err(err) => {
-            println!("Error: {:?}", err);
-            Err(AppError::InteruptionError)
-        }
-    }
-}
-
 fn main() {
     let configuration = match Configuration::init() {
         Ok(config) => config,
@@ -255,7 +62,7 @@ fn main() {
 
     show_help();
     loop {
-        match use_input(None, |line| match_command(line, &configuration)) {
+        match util::use_input(None, |line| match_command(line, &configuration)) {
             Err(_) => break,
             _ => (),
         };

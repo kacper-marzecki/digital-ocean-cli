@@ -5,7 +5,19 @@ pub enum AppError {
     LogicError(String),
     NetworkingError(String),
     InteruptionError,
-    InputError
+    InputError,
+}
+
+impl std::convert::From<ssh2::Error> for AppError {
+    fn from(err: ssh2::Error) -> Self {
+        AppError::LogicError(format!("Ssh error: {}", err))
+    }
+}
+
+impl std::convert::From<std::io::Error> for AppError {
+    fn from(err: std::io::Error) -> Self {
+        AppError::InputError
+    }
 }
 
 impl std::convert::From<ReqError> for AppError {
